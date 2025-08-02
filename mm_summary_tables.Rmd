@@ -1,0 +1,458 @@
+---
+title: "Stratified Summary Tables of Multiple Myeloma Dataset"
+author: "Xujun Gu"
+date: "08-01-2025"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(gtsummary)
+library(dplyr)
+library(labelled)
+library(haven)
+library(readxl)
+mm_data <- read_excel("~/Library/CloudStorage/OneDrive-JohnsHopkins/SOP Slejko Team - MM Research with Datasets - Documents/02_Data Sets/Xujun/R_data_o.xlsx")
+
+
+# New cleaned dataset
+mm_data_cleaned <- mm_data %>% 
+  select(-`Race 2`:-`Race 5`)%>%
+  mutate(
+    Albumin_Status = case_when(
+      `Serum Albumin Pretreatment Level` == "1 Serum albumin >=3.5 g/dL" ~ 1,
+      `Serum Albumin Pretreatment Level` == "0 Serum albumin <3.5 g/dL" ~ 0,
+      TRUE ~ NA_real_ 
+    ),
+    B2M_Status = case_when(
+      `Serum Beta-2 Microglobulin Pretreatment Level` == "0 beta2-microglobulin < 3.5 mg/L" ~ 0,
+      `Serum Beta-2 Microglobulin Pretreatment Level` == "1 beta2-microglobulin >= 3.5 mg/L < 5.5 mg/L" ~ 1,
+      `Serum Beta-2 Microglobulin Pretreatment Level` == "2 beta2-microglobulin >= 5.5 mg/L" ~ 2,
+      TRUE ~ NA_real_ 
+    ),
+    LDH_Status = case_when(
+      `LDH (Lactate Dehydrogenase) Pretreatment Level` == "0 Normal LDH level\r\nLow, below normal" ~ 0,
+      `LDH (Lactate Dehydrogenase) Pretreatment Level` == "1 Above normal LDH level; High" ~ 1,
+      TRUE ~ NA_real_ 
+    ),
+    High_Risk_Cytogenetics = case_when(
+      `High Risk Cytogenetics` == "0 High-risk cytogenetics not identified/not present" ~ 0,
+      `High Risk Cytogenetics` == "1 High-risk cytogenetics present" ~ 1,
+      TRUE ~ NA_real_ 
+    ),
+    RISS = case_when(
+      # Stage I: Albumin >= 3.5, B2M < 3.5, LDH normal, no high-risk cytogenetics
+      Albumin_Status == 1 & B2M_Status == 0 & LDH_Status == 0 & High_Risk_Cytogenetics == 0 ~ "I",
+      
+      # Stage III: B2M >= 5.5 and (high-risk cytogenetics or LDH high)
+      B2M_Status == 2 & (High_Risk_Cytogenetics == 1 | LDH_Status == 1) ~ "III",
+      
+      # Stage II: Everything else with complete data
+      !is.na(Albumin_Status) & !is.na(B2M_Status) & !is.na(LDH_Status) & !is.na(High_Risk_Cytogenetics) ~ "II",
+      
+      TRUE ~ NA_character_
+    ),
+    ISS = case_when(
+      # Stage I: S2M< 3.5 mg/L, Albumin ≥ 3.5 g/dL
+      Albumin_Status == 1 & B2M_Status == 0 ~ "I", 
+      
+      # Stage III: B2M >= 5.5
+      B2M_Status == 2~ "III",
+      
+      # Stage II: Everything else with complete data
+      !is.na(Albumin_Status) & !is.na(B2M_Status) ~ "II",
+   
+      TRUE ~ NA_character_
+    )
+  )%>%
+  mutate(across(contains("Date"), ~ as.Date(as.numeric(.x), origin = "1899-12-30"))) %>%
+  mutate(across(contains("Date"), ~ as.integer(!is.na(.x)), .names = "{.col}_nonmissing")) %>% 
+  rename(
+    Lymph_Node_Dissected_Flag = `Date Regional Lymph Node Dissection_nonmissing`,
+    Diagnostic_Flag = `Date of Surgical Diagnostic and Staging Procedure_nonmissing`,
+    Surgery1_Flag = `Date of Surgery...83_nonmissing`,
+    Surgery2_Flag = `Date of Surgery...87_nonmissing`,
+    Chemo_Flag = `Date of First Chemotherapy (This Course)_nonmissing`,
+    Radiation_Flag = `Date Radiation Started_nonmissing`,
+    Hormone_Flag = `Date of First Hormone Therapy_nonmissing`,
+    Immuno_Flag = `Date of First Immunotherapy_nonmissing`,
+    Other_Treatment_Flag = `Date Other Treatment Started_nonmissing`,
+    Transplant_Flag = `Date of Hematologic Transplant/Endocrine Procedure_nonmissing`
+  )%>% 
+  filter(!is.na(`Date of Initial Diagnosis`))%>%   #should we do that in this stage?
+  mutate(Sex=recode(Sex, 
+                    "01 - Male"="Male", 
+                    "02 - Female"="Female"),
+         `Race 1`=recode(`Race 1`,
+                         "01 - White"="White",
+                         "02 - Black or African American" = "Black",
+                         "04 - Chinese" = "Asian",
+                         "08 - Korean" = "Asian",
+                         "10 - Vietnamese" ="Asian",
+                         "15 - Asian Indian, NOS or Pakistani, NOS" ="Asian",
+                         "16 -      Asian Indian" ="Asian",
+                         "96 - Other Asian, including Asian, NOS and Oriental, NOS" ="Asian",
+                         "98 - Some other race" = "Others",
+                         "99 - Unknown by patient" = NA_character_),
+         `Marital Status 1`=recode(`Marital Status at Diagnosis`,
+                                              "01 - Single (Never Married)" = "Non-Married",
+                                              "02 - Married" = "Married",
+                                              "03 - Separated" = "Non-Married",
+                                              "04 - Divorced" = "Non-Married",
+                                              "05 - Widowed" = "Non-Married",
+                                              "09 - Unknown" = NA_character_),
+         `Marital Status 2`=recode(`Marital Status at Diagnosis`,
+                                              "01 - Single (Never Married)" = "Single",
+                                              "02 - Married" = "Married",
+                                              "03 - Separated" = "Separated or Divorced",
+                                              "04 - Divorced" = "Separated or Divorced",
+                                              "05 - Widowed" = "Widowed",
+                                              "09 - Unknown" = NA_character_),
+         `Insurance Type`=recode(`Primary Payer at Diagnosis`,
+                                 "10 - Insurance, NOS" = NA_character_,
+                                 "20 - Private Insurance: Managed Care/HMO/PPO" = "Private",
+                                 "21 - Private Insurance: Fee-for-Service" = "Private",
+                                 "31 - Medicaid" = "Public",
+                                 "35 - Medicaid: via Managed Care plan" = "Public",
+                                 "60 - Medicare w/o supp; Medicare, NOS" = "Public",
+                                 "61 - Medicare w/ supp, NOS" = "Public",
+                                 "62 - Medicare: via Managed Care plan" = "Public",
+                                 "63 - Medicare w/ private supp" = "Public",
+                                 "64 - Medicare w/ Medicaid eligibility" = "Public",
+                                 "65 - TRICARE" = "Public",
+                                 "67 - Veterans Affairs" = "Public",
+                                 "99 - Unknown" = NA_character_),
+         `Primary Payer at Diagnosis`=recode(`Primary Payer at Diagnosis`,
+                                             "10 - Insurance, NOS" = NA_character_,
+                                             "20 - Private Insurance: Managed Care/HMO/PPO" = "Private",
+                                             "21 - Private Insurance: Fee-for-Service" = "Private",
+                                             "31 - Medicaid" = "Medicaid",
+                                             "35 - Medicaid: via Managed Care plan" = "Medicaid",
+                                             "60 - Medicare w/o supp; Medicare, NOS" = "Medicare",
+                                             "61 - Medicare w/ supp, NOS" = "Medicare",
+                                             "62 - Medicare: via Managed Care plan" = "Medicare",
+                                             "63 - Medicare w/ private supp" = "Medicare",
+                                             "64 - Medicare w/ Medicaid eligibility" = "Medicare",
+                                             "65 - TRICARE" = "Militery",
+                                             "67 - Veterans Affairs" = "Militery",
+                                             "99 - Unknown" = NA_character_),
+         `Spanish Origin`=recode(`Spanish Origin`,
+                                 "00 - Non-Spanish, Non-Hispanic" = "Non-Hispanic",
+                                 "02 - Puerto Rican" = "Hispanic",
+                                 "04 - South Or Central American (Except Brazil)"="Hispanic",
+                                 "05 - Other Specified Spanish Origin" ="Hispanic",
+                                 "06 - Spanish, NOS; Hispanic, NOS; Latino, NOS" = "Hispanic",
+                                 "09 - Unknown Whether Spanish Or Not"=NA_character_
+                                 ),
+         Lymph_Node_Dissected_Flag = recode(as.character(Lymph_Node_Dissected_Flag), "1" = "Yes", "0" = "No"),
+         Diagnostic_Flag = recode(as.character(Diagnostic_Flag), "1" = "Yes", "0" = "No"),
+         Surgery1_Flag = recode(as.character(Surgery1_Flag), "1" = "Yes", "0" = "No"),
+         Surgery2_Flag = recode(as.character(Surgery2_Flag), "1" = "Yes", "0" = "No"),
+         Chemo_Flag = recode(as.character(Chemo_Flag), "1" = "Yes", "0" = "No"),
+         Radiation_Flag = recode(as.character(Radiation_Flag), "1" = "Yes", "0" = "No"),
+         Hormone_Flag = recode(as.character(Hormone_Flag), "1" = "Yes", "0" = "No"),
+         Immuno_Flag = recode(as.character(Immuno_Flag), "1" = "Yes", "0" = "No"),
+         Other_Treatment_Flag = recode(as.character(Other_Treatment_Flag), "1" = "Yes", "0" = "No"),
+         Transplant_Flag = recode(as.character(Transplant_Flag), "1" = "Yes", "0" = "No"),
+         `High Risk Cytogenetics`=recode(`High Risk Cytogenetics`,
+         "0 High-risk cytogenetics not identified/not present"="Not High Risk",
+         "1 High-risk cytogenetics present"= "High Risk",
+         "5 Schema Discriminator 1: Plasma Cell Myeloma Terminology coded to 1 or 9"="Schema Discriminator 1",
+         "7 Test ordered, results not in chart"=NA_character_,
+         "9 Not documented in medical record\r\nHigh Risk Cytogenetics not assessed or unknown if assessed"=NA_character_),
+         `LDH (Lactate Dehydrogenase) Pretreatment Level`=recode(`LDH (Lactate Dehydrogenase) Pretreatment Level`,
+         "0 Normal LDH level\r\nLow, below normal"="Normal LDH",
+         "1 Above normal LDH level; High"= "High LDH",
+         "5 Schema Discriminator 1: Plasma Cell Myeloma Terminology coded to 1 or 9"="Schema Discriminator 1",
+         "7 Test ordered, results not in chart"=NA_character_,
+         "9 Not documented in medical record \r\nLDH (Lactate Dehydrogenase) Level not assessed or unknown if assessed"=NA_character_),
+         `Serum Beta-2 Microglobulin Pretreatment Level`=recode(`Serum Beta-2 Microglobulin Pretreatment Level`,
+         "0 beta2-microglobulin < 3.5 mg/L"="< 3.5 mg/L",
+         "1 beta2-microglobulin >= 3.5 mg/L < 5.5 mg/L"= ">= 3.5 mg/L < 5.5 mg/L",
+         "2 beta2-microglobulin >= 5.5 mg/L" = ">= 5.5 mg/L",
+         "5 Schema Discriminator 1: Plasma Cell Myeloma Terminology coded to 1 or 9"="Schema Discriminator 1",
+         "7 Test ordered, results not in chart"=NA_character_,
+         "9 Not documented in medical record\r\nSerum Beta-2 Microglobulin Pretreatment Level not assessed or unknown if assessed"=NA_character_)
+         ) %>% 
+  mutate(Treatment = case_when(
+      if_any(
+        c(
+          Lymph_Node_Dissected_Flag,
+          Diagnostic_Flag,
+          Surgery1_Flag,
+          Surgery2_Flag,
+          Chemo_Flag,
+          Radiation_Flag,
+          Hormone_Flag,
+          Immuno_Flag,
+          Other_Treatment_Flag,
+          Transplant_Flag
+        ),
+        ~ .x == "Yes"
+      ) ~ "Yes",
+      TRUE ~ "No"
+    )
+  ) %>% 
+  mutate(age_cat=case_when(
+    `Age at Diagnosis (Years)`< 65 ~"Age Under 65",
+    `Age at Diagnosis (Years)`< 75 & `Age at Diagnosis (Years)`>=65 ~"Age 65 to 74",
+    `Age at Diagnosis (Years)`>= 75 ~"Age Over 75",
+  )) %>% 
+  filter(`High Risk Cytogenetics`!="Schema Discriminator 1" | `LDH (Lactate Dehydrogenase) Pretreatment Level`!="Schema Discriminator 1" | `Serum Beta-2 Microglobulin Pretreatment Level` !="Schema Discriminator 1") %>% 
+  filter(`Race 1`=="Black"|`Race 1`=="White")%>% 
+filter(!grepl("SMOLDERING", `Histology Description`))
+
+```
+# Section 1. Stratified Analysis {.tabset}
+
+Note:
+
+Q: What is LDH Pretreatment Level?
+A: LDH (Lactate Dehydrogenase) is a biomarker often used to assess tumor burden and aggressiveness in multiple myeloma (MM).
+
+Q: What is “5 Schema Discriminator 1: Plasma Cell Myeloma Terminology coded to 1 or 9”.
+A: This is a SEER variable used to clarify or “discriminate” between overlapping cancer schemas when a site/histology could fit multiple schemas. It can help for staging, coding, or analyzing a specific cancer. If it’s mostly in the bone marrow, it’s multiple myeloma (coded as 1). If plasma cells spill over into the blood, it's plasma cell leukemia (coded as 9). May need clinician for further explanation.
+
+https://staging.seer.cancer.gov/eod_public/input/1.0/plasma_cell_myeloma/discriminator_1/?version=/eod_public/home/1.2/
+
+
+## Overall Summary
+
+```{r overall_code, echo=FALSE}
+overall_table <- mm_data_cleaned %>%
+  tbl_summary(
+    include = c(
+      `Age at Diagnosis (Years)`, Sex, `Race 1`, `Marital Status 1`, `Marital Status 2`,
+      Lymph_Node_Dissected_Flag,Diagnostic_Flag,Surgery1_Flag,Surgery2_Flag,Chemo_Flag,Radiation_Flag,Hormone_Flag,Immuno_Flag,Other_Treatment_Flag,Transplant_Flag, Treatment,`Insurance Type`,
+      `Primary Payer at Diagnosis`, `High Risk Cytogenetics`,
+      `LDH (Lactate Dehydrogenase) Pretreatment Level`,
+      `Serum Beta-2 Microglobulin Pretreatment Level`, RISS, ISS
+    ),
+    statistic = list(
+      all_continuous() ~ "{mean} (SD={sd}) ({min}, {max})",
+      all_categorical() ~ "{n} /{N} ({p}%)"
+    ),
+    digits = all_categorical() ~ c(2, 0),
+    missing_text = "(Missing)",
+    type = all_dichotomous() ~ "categorical"
+    ) %>%
+  bold_labels() %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Table 1. Overall Groups**")
+
+overall_table
+```
+
+
+
+## High Risk Cytogenetics
+```{r cyto-table, echo=FALSE}
+cyto_table <- mm_data_cleaned %>%
+  tbl_summary(
+    by = `High Risk Cytogenetics`,
+    include = c(`Age at Diagnosis (Years)`, Sex, `Race 1`, `Marital Status 1`, `Marital Status 2`,Lymph_Node_Dissected_Flag,Diagnostic_Flag,Surgery1_Flag,Surgery2_Flag,Chemo_Flag,Radiation_Flag,Hormone_Flag,Immuno_Flag,Other_Treatment_Flag,Transplant_Flag,`Insurance Type`, `Primary Payer at Diagnosis`, RISS, ISS),
+    digits = all_categorical() ~ c(0, 2),
+    missing_text = "(Missing)",
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = all_dichotomous() ~ "categorical"
+  ) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 2.1. High Risk Cytogenetics**")
+
+cyto_table
+```
+
+
+## LDH Pretreatment Level
+
+```{r ldh-table, echo=FALSE}
+LDH_level_table <- mm_data_cleaned %>%
+  tbl_summary(
+    by = `LDH (Lactate Dehydrogenase) Pretreatment Level`,
+    include = c(`Age at Diagnosis (Years)`, Sex, `Race 1`, `Marital Status 1`, `Marital Status 2`, Lymph_Node_Dissected_Flag,Diagnostic_Flag,Surgery1_Flag,Surgery2_Flag,Chemo_Flag,Radiation_Flag,Hormone_Flag,Immuno_Flag,Other_Treatment_Flag,Transplant_Flag,`Insurance Type`, `Primary Payer at Diagnosis`, RISS, ISS),
+    digits = all_categorical() ~ c(0, 2),
+    missing_text = "(Missing)",
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = all_dichotomous() ~ "categorical"
+  ) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 2.2. LDH Pretreatment Level**")
+
+LDH_level_table
+```
+
+
+## Serum Beta-2 Microglobulin Level
+
+```{r serum-table, echo=FALSE}
+Serum_table <- mm_data_cleaned %>%
+  tbl_summary(
+    by = `Serum Beta-2 Microglobulin Pretreatment Level`,
+    include = c(`Age at Diagnosis (Years)`, Sex, `Race 1`,`Marital Status 1`, `Marital Status 2`, Lymph_Node_Dissected_Flag,Diagnostic_Flag,Surgery1_Flag,Surgery2_Flag,Chemo_Flag,Radiation_Flag,Hormone_Flag,Immuno_Flag,Other_Treatment_Flag,Transplant_Flag, `Insurance Type`, `Primary Payer at Diagnosis`, RISS, ISS),
+    digits = all_categorical() ~ c(0, 2),
+    missing_text = "(Missing)",
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = all_dichotomous() ~ "categorical"
+  ) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 2.3. Serum Beta-2 Microglobulin Pretreatment Level**")
+
+Serum_table
+```
+<!-- # ```{r serum, results='asis'} -->
+<!-- # print(Serum_table) -->
+<!-- # ``` -->
+
+
+
+## SCT
+```{r ruoyi1, echo=FALSE}
+SCT <- mm_data_cleaned %>%
+  tbl_summary(
+    by = `Transplant_Flag`,
+    include = c(`Age at Diagnosis (Years)`,age_cat, Sex, `Race 1`,`Marital Status 1`, `Marital Status 2`, `Insurance Type`, `Primary Payer at Diagnosis`, `High Risk Cytogenetics`,`LDH (Lactate Dehydrogenase) Pretreatment Level`,`Serum Beta-2 Microglobulin Pretreatment Level`, RISS, ISS),
+    digits = all_categorical() ~ c(0, 2),
+    missing_text = "(Missing)",
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = all_dichotomous() ~ "categorical"
+  ) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 2.4 Ruoyi_table_check_SCT**") %>% 
+  add_p()
+
+SCT
+```
+
+<!-- # ```{r ruoyi2, results='asis'} -->
+<!-- # print(SCT) -->
+<!-- # ``` -->
+
+
+## Race
+```{r race_1, echo=FALSE}
+Race <- mm_data_cleaned %>%
+  tbl_summary(
+    by = `Race 1`,
+    include = c(`Age at Diagnosis (Years)`,age_cat, Sex,`Marital Status 1`, `Marital Status 2`, `Insurance Type`, `Primary Payer at Diagnosis`, `High Risk Cytogenetics`,`LDH (Lactate Dehydrogenase) Pretreatment Level`,`Serum Beta-2 Microglobulin Pretreatment Level`, Lymph_Node_Dissected_Flag,Diagnostic_Flag,Surgery1_Flag,Surgery2_Flag,Chemo_Flag,Radiation_Flag,Hormone_Flag,Immuno_Flag,Other_Treatment_Flag,Transplant_Flag, Treatment, , RISS, ISS),
+    digits = all_categorical() ~ c(0, 2),
+    missing_text = "(Missing)",
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    type = all_dichotomous() ~ "categorical"
+  ) %>%
+  add_overall() %>%
+  modify_header(label ~ "**Variable**") %>%
+  bold_labels() %>%
+  modify_caption("**Table 2.5 Race Stratified Table**") %>% 
+  add_p()
+
+Race
+```
+
+<!-- # ```{r race_2, results='asis'} -->
+<!-- # print(Race) -->
+<!-- # ``` -->
+
+
+
+# Logistic Regression {.tabset}
+
+Running logistic regression for all different treatement to see the difference
+
+## SCT
+``` {r logistics}
+mm_data_cleaned <- mm_data_cleaned %>%
+  mutate(Transplant_bin = ifelse(Transplant_Flag == "Yes", 1, 0),
+         Sex_bin = ifelse(Sex == "Male" , 1, 0))
+
+mm_data_cleaned$`Race 1` <- relevel(factor(mm_data_cleaned$`Race 1`), ref = "White")
+model_1 <- glm(Transplant_bin ~ Sex_bin +`Race 1`+ `Insurance Type` + `Marital Status 1` + `Spanish Origin`+ `High Risk Cytogenetics`+`LDH (Lactate Dehydrogenase) Pretreatment Level`+`Serum Beta-2 Microglobulin Pretreatment Level`, data = mm_data_cleaned, family = binomial)
+
+model_1 %>%
+  tbl_regression(exponentiate = FALSE)
+```
+
+## Surgery1
+
+## Surgery2
+
+## Chemo
+
+
+# Treatment Data list
+
+1. Radiation Therapy
+Reason for No Radiation
+Summary of Therapy gives the information on whether patients received the Radiation Therapy or not.
+Comments – Radiation Treatment
+Date Radiation Started
+Date Radiation Ended
+
+2. Chemotherapy
+Date of First Chemotherapy
+Chemotherapy 
+Comments – Chemotherapy Treatment
+
+3. Surgery
+Date of Surgical Diagnostic and Staging Procedure (Diagnostic)
+Date of Surgery
+
+4. Hormone (Corticosteroid) Therapy
+Date of First Hormone Therapy
+Comments – Hormone Treatment
+		
+5. Immunotherapy / Biologic Therapy
+Date of First Immunotherapy
+Immunotherapy
+Comments – Immunotherapy Treatment
+
+6. Hematologic Transplant / Endocrine Procedure
+Date of Hematologic Transplant/Endocrine Procedure
+
+7. “Other” Therapy
+Date Other Treatment Started
+Other Treatment
+Comments – Other Treatment
+
+
+
+
+#Data Visualization
+``` {r Data visualzation}
+pie_race <- mm_data_cleaned %>%
+  count(`Race 1`) %>%
+  mutate(percent = n / sum(n) * 100)
+  
+library(ggplot2)
+ggplot(pie_race, aes(x = "", y = percent, fill = `Race 1`)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +                
+  labs(fill = "Race") +
+  theme_void()
+
+library(ggplot2)
+
+ggplot(mm_data_cleaned, aes(x = `Primary Payer at Diagnosis`, fill = `Race 1`)) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Count of Insurance Type by Race",
+    x = "Insurance Type",
+    y = "Number of Patients",
+    fill = "Race"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+
+``` 
+
