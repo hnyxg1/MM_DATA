@@ -268,7 +268,7 @@ library(tidylog)             # masks dplyr verbs with logging versions
 
 
 #Step 2: Cohort building
-mm_data_cleaned <- mm_data_labeled %>%
+mm_data_extreme <- mm_data_labeled %>%
   
   # require a diagnosis date
   filter(!is.na(`Date of Initial Diagnosis`)) %>%
@@ -337,4 +337,5 @@ mm_data_cleaned <- mm_data_labeled %>%
          "Date of Hematologic Transplant/Endocrine Procedure"
   ) 
 
-
+save(data,
+     file=paste0(data_dir, "mm_data_extreme.RData"))

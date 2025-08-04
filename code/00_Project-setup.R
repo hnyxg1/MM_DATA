@@ -1,6 +1,6 @@
-22
+
 #define shared data directory for this project
-data_dit = "~/Library/CloudStorage/Dropbox/UMB/Slejko Project/MM Data/MM_DATA/data"
+data_dir = "~/Library/CloudStorage/Dropbox/UMB/Slejko Project/MM Data/MM_DATA/data/"
 
 #set knitr options
 options(knitr.table.format="html")
