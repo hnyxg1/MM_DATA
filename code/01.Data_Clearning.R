@@ -278,7 +278,7 @@ mm_data_cleaned <- mm_data_labeled %>%
     `High Risk Cytogenetics` != "Schema Discriminator 1" & 
       `LDH (Lactate Dehydrogenase) Pretreatment Level` != "Schema Discriminator 1" & 
       `Serum Beta-2 Microglobulin Pretreatment Level` != "Schema Discriminator 1" 
-  ) %>%
+    ) %>%
   
   # restrict to Black or White race
   filter(`Race 1` %in% c("Black", "White")) %>%
