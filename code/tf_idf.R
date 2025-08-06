@@ -1,4 +1,4 @@
-# Loading required libraries
+
 library(tidyverse)
 library(tidytext)
 library(textstem)
@@ -6,7 +6,8 @@ library(wordcloud)
 library(RColorBrewer)
 library(readxl)
 
-data <- read_excel("/Users/guxujun/Library/CloudStorage/Dropbox/UMB/comments_ehr.xlsx")
+#Import data set
+data <- read_excel("/Users/guxujun/Library/CloudStorage/Dropbox/UMB/Slejko Project/MM Data/MM_DATA/comments_ehr.xlsx")
 View(data)
 
 # Reshape data to treat each comment column as a document
@@ -32,7 +33,7 @@ data_tokens <- data_long %>%
   # Stem words to reduce inflectional forms
   mutate(word = lemmatize_words(word)) %>%
   # Remove short words
-  filter(nchar(word) > 2)
+  filter(nchar(word) > 5)
 
 # Calculate term frequency (TF)
 tf <- data_tokens %>%
@@ -56,12 +57,29 @@ tf_idf <- tf %>%
 # Summarize top TF-IDF terms per comment category
 top_tf_idf <- tf_idf %>%
   group_by(comment_category) %>%
-  slice_max(order_by = tf_idf, n = 10, with_ties = FALSE) %>%
+  slice_max(order_by = tf_idf, n = 50, with_ties = FALSE) %>%
   ungroup()
 
 # Print top TF-IDF terms
-print("Top 5 TF-IDF terms per comment category:")
+print("Top 50 TF-IDF terms per comment category:")
 print(top_tf_idf)
+write_csv(tf_idf, "Top_50_TF-IDF_terms.csv")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Visualize TF-IDF for each comment category
 tf_idf_plots <- tf_idf %>%

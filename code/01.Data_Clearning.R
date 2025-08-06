@@ -275,10 +275,11 @@ mm_data_extreme <- mm_data_labeled %>%
   
   # exclude observations where all three of these fields equal the schema discriminator
   filter(
-    `High Risk Cytogenetics` != "Schema Discriminator 1" & 
-      `LDH (Lactate Dehydrogenase) Pretreatment Level` != "Schema Discriminator 1" & 
-      `Serum Beta-2 Microglobulin Pretreatment Level` != "Schema Discriminator 1" 
-    ) %>%
+    (is.na(`High Risk Cytogenetics`) | `High Risk Cytogenetics` != "Schema Discriminator 1") &
+      (is.na(`LDH (Lactate Dehydrogenase) Pretreatment Level`) | `LDH (Lactate Dehydrogenase) Pretreatment Level` != "Schema Discriminator 1") &
+      (is.na(`Serum Beta-2 Microglobulin Pretreatment Level`) | `Serum Beta-2 Microglobulin Pretreatment Level` != "Schema Discriminator 1") &
+      (is.na(`Serum Albumin Pretreatment Level`)|`Serum Albumin Pretreatment Level`!= "5 Schema Discriminator 1: Plasma Cell Myeloma Terminology coded to 1 or 9")
+  )%>%
   
   # restrict to Black or White race
   filter(`Race 1` %in% c("Black", "White")) %>%
@@ -337,5 +338,5 @@ mm_data_extreme <- mm_data_labeled %>%
          "Date of Hematologic Transplant/Endocrine Procedure"
   ) 
 
-save(data,
+save(mm_data_extreme,
      file=paste0(data_dir, "mm_data_extreme.RData"))
